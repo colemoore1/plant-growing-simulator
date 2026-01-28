@@ -22,6 +22,7 @@ class World:
 	boxes_to_update = []
 	plant_energy = {}
 	plant_life = {}
+	growCellLocation = []
 	starting_energy = 1000
 	mutation_rate = 4
 	leaf_cells = []
@@ -60,18 +61,22 @@ def generate_random_plant():
 
 
 def grow_plants():
-	new_boxes_to_update = []
-	for box in World.boxes_to_update:
-		if World.plant_grid[box[0], box[1]] == 0:
-			print("what the heck")
-			continue
-		genes = World.plant_genes[World.plant_grid[box[0], box[1]]]
-		for direction in range(4):
-			print(box[0])
-			print(box[1])
-			print(World.plant_grid[box[0], box[1]])
-			if genes[World.gene_grid[box[0], box[1]]][direction] < 64:
-				new_cell_location = box.copy()
+	for box in World.growCellLocation: # grows all the stem cells in the world
+
+		genes = World.plant_genes[World.plant_grid[box[0], box[1]]] # gets the genes for the stem cell its growing
+		for direction in range(4): # checks each direction if it wants to grow 
+
+			if genes[World.gene_grid[box[0], box[1]]][direction] < 64: # if the cell wants to grow
+
+				#exceptions to not let the cell grow
+
+				if World.plant_energy[World.plant_grid[box[0], box[1]]] < 5:   # no energy left
+					continue
+				if World.plant_grid[new_cell_location[0], new_cell_location[1]] != 0:  # if theres another plant in the way
+					continue
+
+
+				new_cell_location = box.copy() # copy location and change it to where the direction defines
 				if direction == 0:
 					new_cell_location[0] -= 1
 				elif direction == 1:
@@ -80,7 +85,10 @@ def grow_plants():
 					new_cell_location[1] -= 1
 				elif direction == 3:
 					new_cell_location[1] += 1
-				if new_cell_location[0] == World.GRID_WIDTH:
+
+				# exceptions to not let the cell grow
+
+				if new_cell_location[0] == World.GRID_WIDTH:  # running off the edge of the world
 					continue
 				if new_cell_location[1] == World.GRID_HEIGHT:
 					continue
@@ -88,29 +96,12 @@ def grow_plants():
 					continue
 				if new_cell_location[1] == -1:
 					continue
-				if World.plant_grid[new_cell_location[0], new_cell_location[1]] != 0:
-					continue
-				if World.plant_energy[World.plant_grid[box[0], box[1]]] < 5:
-					continue
 
-				World.plant_grid[new_cell_location[0], new_cell_location[1]] = World.plant_grid[box[0], box[1]]
-				World.gene_grid[new_cell_location[0], new_cell_location[1]] = genes[World.gene_grid[box[0], box[1]]][direction]
+				
 
-				if genes[World.gene_grid[box[0], box[1]]][direction+4] == 0:
-					World.plant_energy[World.plant_grid[box[0], box[1]]] -= 3
-					World.cell_type_grid[new_cell_location[0], new_cell_location[1]] = 0
-					new_boxes_to_update.append([new_cell_location[0], new_cell_location[1]])
-				if genes[World.gene_grid[box[0], box[1]]][direction+4] == 1:
-					World.plant_energy[World.plant_grid[box[0], box[1]]] -= 2
-					World.cell_type_grid[new_cell_location[0], new_cell_location[1]] = 1
-					World.leaf_cells.append(new_cell_location)
-				if genes[World.gene_grid[box[0], box[1]]][direction+4] == 2:
-					World.plant_energy[World.plant_grid[box[0], box[1]]] -= 5
-					World.cell_type_grid[new_cell_location[0], new_cell_location[1]] = 2
+				
+				
 
-
-	World.boxes_to_update = []
-	World.boxes_to_update = new_boxes_to_update.copy()
 
 def mutate_genes(genes):
 	for times in range(World.mutation_rate):
