@@ -6,6 +6,19 @@ import numpy as np
 pygame.init()
 clock = pygame.time.Clock()
 
+#plant dna layout
+#
+#64 genes, each gene has four direction genes, then four cell type genes for that direction
+#
+# example, first ones are whether to grow and what gene that spot will take
+# next four are what cell type it will be 32 127 0 86 2 0 2 1
+#
+#if its under 64 you grow
+#if the cell type is 0 its another growing cell
+#if its 1 then its a leaf cell
+#if its 2 then its a body cell
+
+
 class World:
 	current_location = 0
 	plantid = 1
@@ -58,12 +71,19 @@ def generate_random_plant():
 	World.plant_energy[World.plantid] = World.starting_energy
 	World.plant_life[World.plantid] = 0
 	World.plantid += 1
+	World.growCellLocation.append([new_plant_x, World.GRID_HEIGHT-1])
 
 
 def grow_plants():
+	newGrowCellLocation = []
 	for box in World.growCellLocation: # grows all the stem cells in the world
 
-		genes = World.plant_genes[World.plant_grid[box[0], box[1]]] # gets the genes for the stem cell its growing
+		plant_id = World.plant_grid[box[0], box[1]]
+		if plant_id == 0:
+			continue
+		genes = World.plant_genes[plant_id] # gets the genes for the stem cell its growing
+
+		print(World.plant_grid[box[0], box[1]]) 
 		for direction in range(4): # checks each direction if it wants to grow 
 
 			if genes[World.gene_grid[box[0], box[1]]][direction] < 64: # if the cell wants to grow
@@ -71,8 +91,6 @@ def grow_plants():
 				#exceptions to not let the cell grow
 
 				if World.plant_energy[World.plant_grid[box[0], box[1]]] < 5:   # no energy left
-					continue
-				if World.plant_grid[new_cell_location[0], new_cell_location[1]] != 0:  # if theres another plant in the way
 					continue
 
 
@@ -86,6 +104,9 @@ def grow_plants():
 				elif direction == 3:
 					new_cell_location[1] += 1
 
+
+				
+
 				# exceptions to not let the cell grow
 
 				if new_cell_location[0] == World.GRID_WIDTH:  # running off the edge of the world
@@ -98,10 +119,47 @@ def grow_plants():
 					continue
 
 				
+				if World.plant_grid[new_cell_location[0], new_cell_location[1]] != 0:  # if theres another plant in the way
+					continue
+
 
 				
+				World.plant_grid[new_cell_location[0], new_cell_location[1]] = World.plant_grid[box[0], box[1]]						#mark the new spot as part of the plant
+				World.gene_grid[new_cell_location[0], new_cell_location[1]] = genes[World.gene_grid[box[0], box[1]]][direction]		# put the new genes in that spot
+
+				if genes[World.gene_grid[box[0], box[1]]][direction+4] == 2:
+
+					World.plant_energy[World.plant_grid[box[0], box[1]]] -= 1 # take energy
+
+					World.cell_type_grid[box[0], box[1]] = 2 # the spot it left is a stem now
+
+					World.cell_type_grid[new_cell_location[0], new_cell_location[1]] = 0 #the spot it went to is a grow cell now
+					newGrowCellLocation.append([new_cell_location[0], new_cell_location[1]])
+
+				if genes[World.gene_grid[box[0], box[1]]][direction+4] == 1:
+
+					World.plant_energy[World.plant_grid[box[0], box[1]]] -= 2 # take energy
+
+					World.cell_type_grid[box[0], box[1]] = 1 # the spot it left is a leaf now
+					World.leaf_cells.append(new_cell_location) # adds to the leaf locations for adding energy
+
+					World.cell_type_grid[new_cell_location[0], new_cell_location[1]] = 1 #the spot it went to is a grow cell now
+					newGrowCellLocation.append([new_cell_location[0], new_cell_location[1]])
+
+				if genes[World.gene_grid[box[0], box[1]]][direction+4] == 0:
+					World.plant_energy[World.plant_grid[box[0], box[1]]] -= 5 # take energy
+
+
+					World.cell_type_grid[box[0], box[1]] = 1 # the spot it left is another grow cell now.     this is the new grow cell
+					newGrowCellLocation.append([new_cell_location[0], new_cell_location[1]])
+
+					World.cell_type_grid[new_cell_location[0], new_cell_location[1]] = 1 #the spot it went to is a grow cell now  this is the old grow cell
+					newGrowCellLocation.append([new_cell_location[0], new_cell_location[1]])
+				
+	World.growCellLocation = newGrowCellLocation.copy()
 				
 
+					
 
 def mutate_genes(genes):
 	for times in range(World.mutation_rate):
@@ -116,6 +174,7 @@ def give_energy():
 
 def remove_plants():
 	plants_to_delete = []
+	newGrowCellLocation = []
 	World.leaf_cells = []
 	plants_to_survive = 100
 	tallest = 5
@@ -142,15 +201,17 @@ def remove_plants():
 								continue
 							genes = World.plant_genes[World.plant_grid[xloc, yloc]]
 
-							World.plant_genes[World.plantid] = genes
+							World.plant_genes[World.plantid] = [g.copy() for g in genes]
+
 							new_plant_x_location = random.randrange(0, World.GRID_WIDTH)
 							World.plant_grid[new_plant_x_location, World.GRID_HEIGHT - 1] = World.plantid
-							World.boxes_to_update.append([new_plant_x_location, World.GRID_HEIGHT - 1])
+							newGrowCellLocation.append([new_plant_x_location, World.GRID_HEIGHT - 1])
 							World.plant_energy[World.plantid] = World.starting_energy
 							if tallest > 0:
 								World.plant_energy[World.plantid] += 100
 							World.plant_life[World.plantid] = 0
 							World.plantid += 1
+							
 
 					World.plant_grid[xloc, yloc] = 0
 					World.cell_type_grid[xloc, yloc] = 0
@@ -159,6 +220,7 @@ def remove_plants():
 		for yloc in range(World.GRID_HEIGHT):
 			if World.cell_type_grid[xloc, yloc] == 1:
 				World.leaf_cells.append([xloc, yloc])
+	World.growCellLocation.extend(newGrowCellLocation)
 
 
 def render_world(update_everything = True):
