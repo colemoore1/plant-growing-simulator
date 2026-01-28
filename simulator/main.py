@@ -37,12 +37,12 @@ class World:
 	plant_energy = {}
 	plant_life = {}
 	growCellLocation = []
-	starting_energy = 15
+	starting_energy = 50
 	mutation_rate = 2
 	leaf_cells = []
-	sunlight_level = 20.0
+	sunlight_level = 3.0
 	slow = True
-	numPlantsPerSeed = 3
+	numPlantsPerSeed = 1
 
 class colors:
 	sky_color = (50, 150, 255)
@@ -134,18 +134,18 @@ def grow_plants():
 
             # ---- Cell type handling ----
             if cell_type == 2:  # stem
-                World.plant_energy[plant_id] -= 1
+                World.plant_energy[plant_id] -= .5
                 World.cell_type_grid[x, y] = 2
                 keep_old_tip = False
 
             elif cell_type == 1:  # leaf
-                World.plant_energy[plant_id] -= 2
+                World.plant_energy[plant_id] -= 1
                 World.cell_type_grid[x, y] = 1
                 World.leaf_cells.append([x, y])
                 keep_old_tip = False
 
             elif cell_type == 3:  # seed (terminal)
-                World.plant_energy[plant_id] -= 15
+                World.plant_energy[plant_id] -= 20
                 World.cell_type_grid[x, y] = 3
                 keep_old_tip = False
 
@@ -175,7 +175,6 @@ def old_grow_plants():
 			continue
 		genes = World.plant_genes[plant_id] # gets the genes for the stem cell its growing
 
-		print(World.plant_grid[box[0], box[1]]) 
 		for direction in range(4): # checks each direction if it wants to grow 
 
 			if genes[World.gene_grid[box[0], box[1]]][direction] < 64: # if the cell wants to grow
@@ -269,12 +268,8 @@ def mutate_genes(genes):
 		genes[random.randrange(0, 64)][random.randrange(4, 8)] = random.randrange(1, 3)
 	return genes
 
-def old_give_energy():
-	for plantloc in World.leaf_cells:
-		if World.plant_grid[plantloc[0], plantloc[1]] != 0:
-			World.plant_energy[World.plant_grid[plantloc[0], plantloc[1]]] += World.sunlight_level
 
-def give_energy():
+def give_energy_old():
     # Precompute light attenuation column by column (top-down)
     for x in range(World.GRID_WIDTH):
         light = World.sunlight_level  # start with full light at top
@@ -288,7 +283,7 @@ def give_energy():
                 World.plant_energy[plant_id] += light
 
                 # Leaves strongly reduce light for lower cells
-                light *= 0.7  
+                light *= 0.4  
 
             elif cell_type == 2:
                 # Stems partially block light
@@ -300,16 +295,45 @@ def give_energy():
 
             # Seeds block like stems
             elif cell_type == 3:
-                light *= 0.97
+                light *= 0.90
 
             # Stop early if no usable light remains
             if light < 0.01:
                 break
 
+def give_energy():
+    energy_gained = {plant_id: 0 for plant_id in World.plant_energy}  # track energy from light
+
+    for x in range(World.GRID_WIDTH):
+        light = World.sunlight_level  # start with full light at top
+
+        for y in range(World.GRID_HEIGHT):
+            cell_type = World.cell_type_grid[x, y]
+            plant_id = World.plant_grid[x, y]
+
+            if plant_id != 0:
+                if cell_type == 1:  # leaf
+                    gained = light
+                    World.plant_energy[plant_id] += gained
+                    energy_gained[plant_id] += gained
+                    light *= 0.4  # blocks light below
+                elif cell_type == 2:  # stem
+                    light *= 0.95
+                elif cell_type == 0:  # grow cell
+                    light *= 0.90
+                elif cell_type == 3:  # seed
+                    light *= 0.90
+
+            if light < 0.01:
+                break
+
+    return energy_gained
+
+
 def maintenance_cost():
 	for plant_id in World.plant_energy:
 		cell_count = np.count_nonzero(World.plant_grid == plant_id)
-		World.plant_energy[plant_id] -= cell_count * 0.01
+		World.plant_energy[plant_id] -= cell_count * 0.3 
 
 def remove_plants():
 	newGrowCellLocation = []
@@ -323,7 +347,7 @@ def remove_plants():
 		World.plant_life[plant_id] += 1
 
 		# Plant dies if energy is too low or age exceeds lifespan
-		if World.plant_energy[plant_id] <= 0 or World.plant_life[plant_id] > World.plant_genes[plant_id][0][5]*3:
+		if World.plant_life[plant_id] > max(World.plant_genes[plant_id][0][5], 30): #World.plant_energy[plant_id] <= 0 
             # Remove all cells for this plant
 			locs = np.argwhere(World.plant_grid == plant_id)
 			for loc in locs:
@@ -333,7 +357,7 @@ def remove_plants():
 					World.leaf_cells.append([x, y])  # Leaves still count for light
 				# Only reproduce if seed cell AND parent has enough energy
 				
-				if cell_type == 3 and (World.GRID_HEIGHT - y > 2):
+				if cell_type == 3 and (World.GRID_HEIGHT - y > 2): #and World.plant_energy[plant_id] > 5:
 					genes = [g.copy() for g in World.plant_genes[plant_id]]
 					genes = mutate_genes(genes)
 					for _ in range(World.numPlantsPerSeed):
