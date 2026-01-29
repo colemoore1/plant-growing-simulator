@@ -35,7 +35,7 @@ class World:
 	plantid = 1
 	SCREEN_WIDTH = 1200
 	SCREEN_HEIGHT = 800
-	GRID_WIDTH = 600
+	GRID_WIDTH = 500
 	GRID_HEIGHT = 70
 	GRID_DISPLAYED_WIDTH = SCREEN_WIDTH//10
 	template = [0] * GRID_HEIGHT
@@ -50,7 +50,7 @@ class World:
 	starting_energy = 50
 	mutation_rate = 8
 	leaf_cells = []
-	sunlight_level = 5.0
+	sunlight_level = 3.0
 	slow = True
 	numPlantsPerSeed = 1
 	plant_trunk_locations = []
@@ -59,8 +59,8 @@ class colors:
 	sky_color = (50, 150, 255)
 	leaf_colors = [(50, 100, 50), (0, 80, 0), (50, 150, 100)]
 	stem_colors = [(80, 20, 20), (100, 20, 20), (200, 200, 0)]
-	seed_colors = [(255, 0, 100), (255, 0, 40), (180, 0, 0)]
-	grow_cell_colors = [(255, 255, 255)]
+	seed_colors = [(255, 0, 100), (150, 100, 40), (180, 0, 0)]
+	grow_cell_colors = [(70, 180, 70)]
 	
 
 def generate_random_plant():
@@ -124,7 +124,8 @@ def grow_plants():
 
         keep_old_tip = True
 
-        for direction in range(4):
+        directions = [2, 0, 1, 3]  # up, left, right, down
+        for direction in directions:
             if genes[gene_index][direction] >= 64:
                 continue
             if genes[gene_index][direction+ 8] == 2:
@@ -164,7 +165,9 @@ def grow_plants():
 
             # ---- Cell type handling ----
             if cell_type == 2:  # stem
-                World.plant_energy[plant_id] -= .5
+                stump = get_stump_location(plant_id)
+                height = stump[1] - y if stump else 0
+                World.plant_energy[plant_id] -= 0.5 + 0.02 * height
                 World.cell_type_grid[x, y] = 2
                 keep_old_tip = False
 
@@ -221,18 +224,26 @@ def give_energy():
 
             if plant_id != 0:
                 if cell_type == 1:  # leaf
-                    gained = light
-                    World.plant_energy[plant_id] += gained
+                    stump = get_stump_location(plant_id)
+                    if stump:
+                        dist = abs(x - stump[0]) + (stump[1] - y)
+                        gained = light / (1 + 0.1 * dist)
+                    else:
+                        gained = light
+                    if World.plant_grid[x, max(y-1, 0)] == 0:
+                        World.plant_energy[plant_id] += gained * 1.5
+                    else:
+                        World.plant_energy[plant_id] += gained  
                     energy_gained[plant_id] += gained
-                    light *= 0.4  # blocks light below
+                    light *= 0.65  # blocks light below
+                    
                 elif cell_type == 2:  # stem
-                    light *= 0.6
+                    light *= 0.9
                 elif cell_type == 0:  # grow cell
-                    light *= 0.6
+                    light *= 0.9
                 elif cell_type == 3:  # seed
                     light *= 0.8
-                if World.plant_grid[x, max(y-1, 0)] == 0:
-                   light *= 2
+                   
             if light < 0.01:
                 break
 
@@ -260,7 +271,7 @@ def get_stump_location(plant_id):
 
 def maintenance_cost():
     BASE_COST = 0.03       # baseline metabolic cost
-    EXP_FACTOR = 1.05      # exponential distance penalty
+    EXP_FACTOR = 1.15      # exponential distance penalty
     SIDE_PENALTY = 1.2     # horizontal cost multiplier
 
     for plant_id in list(World.plant_energy.keys()):
@@ -314,9 +325,10 @@ def remove_plants():
         # 2. No energy
         # 3. Shaded (energy < minimal)
         die = (
-            World.plant_energy[plant_id] <= 0
-            or World.plant_life[plant_id] > max(World.plant_genes[plant_id][0][5], 30)
-            or (plant_size < 3 and World.plant_energy[plant_id] < 2)
+        World.plant_energy[plant_id] <= 0
+        or World.plant_energy[plant_id] < -20
+        or World.plant_life[plant_id] > max(World.plant_genes[plant_id][0][5]/2, 10)
+        or (plant_size < 3 and World.plant_energy[plant_id] < 2)
         )
 
         if not die:
@@ -407,22 +419,21 @@ def render_world(update_everything = True):
 						screen.blit(BOXES["stem"], (x_loc*10, y_loc*10))
 					elif World.cell_type_grid[x_loc+World.current_location, y_loc] == 3:
 						screen.blit(BOXES["seed"], (x_loc*10, y_loc*10))
-		#random.seed()
-	else:
-		for loc in World.boxes_to_update:
-			x_loc = loc[0]
-			y_loc = loc[1]
-			box = pygame.Surface((10, 10))
-			plant_id = World.plant_grid[x_loc+World.current_location, y_loc]
-			if plant_id == 0:
-				color = colors.sky_color
-				box.fill(color)
-			else:
-				random.seed(int(plant_id))
-				color = colors.stem_colors[random.randrange(0, len(colors.stem_colors))]
-				box.fill(color)
-			screen.blit(box, (x_loc*10, y_loc*10))
-		random.seed()
+		for x_loc in range(World.GRID_WIDTH):
+			for y_loc in range(World.GRID_HEIGHT):
+				box = pygame.Surface((1, 1))
+				plant_id = World.plant_grid[x_loc, y_loc]
+				if plant_id == 0:
+					screen.blit(BOXES["sky"], (x_loc, y_loc+World.GRID_HEIGHT*10+40))
+				else:
+					if World.cell_type_grid[x_loc, y_loc] == 0:
+						screen.blit(BOXES["growCell"], (x_loc, y_loc+World.GRID_HEIGHT*10+40))
+					elif World.cell_type_grid[x_loc, y_loc] == 1:
+						screen.blit(BOXES["leaf"], (x_loc, y_loc+World.GRID_HEIGHT*10+40))
+					elif World.cell_type_grid[x_loc, y_loc] == 2:
+						screen.blit(BOXES["stem"], (x_loc, y_loc+World.GRID_HEIGHT*10+40))
+					elif World.cell_type_grid[x_loc, y_loc] == 3:
+						screen.blit(BOXES["seed"], (x_loc, y_loc+World.GRID_HEIGHT*10+40))
 
 screen = pygame.display.set_mode((World.SCREEN_WIDTH, World.SCREEN_HEIGHT))
 
@@ -502,7 +513,6 @@ def load_world(filename="world_save.pkl"):
     render_world(True)
 
 
-
 generate_random_plant()
 
 tick = 0
@@ -549,7 +559,18 @@ while not done:
 					save_world()
 			if event.key == pygame.K_l:
 				load_world()
-	if World.slow:
-		clock.tick(10) #maximum frame rate
+			CELL_SIZE = 10
+			if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+				mx, my = pygame.mouse.get_pos()
+				gx = mx // CELL_SIZE
+				gy = my // CELL_SIZE
+
+				if 0 <= gx < World.GRID_WIDTH and 0 <= gy < World.GRID_HEIGHT:
+					plant_id = World.plant_id_grid[gx, gy]
+					if plant_id != -1:
+						save_single_plant_world(plant_id)
+						print(f"Saved plant {plant_id}")
+		if World.slow:
+			clock.tick(5) #maximum frame rate
 	pygame.display.flip()
 
